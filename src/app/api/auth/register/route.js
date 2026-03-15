@@ -5,7 +5,7 @@
 
 export async function POST(request) {
   const token = request.headers.get("Authorization");
-  const body = await request.json();
+  const body  = await request.json();
 
   const response = await fetch("https://api-kinderbeam.onrender.com/api/auth/register/", {
     method: "POST",
