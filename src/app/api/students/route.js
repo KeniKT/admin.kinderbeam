@@ -1,17 +1,9 @@
-// ---------------------------------------------------------------
-// src/app/api/students/route.js  →  route: /api/students
-// Server-side proxy — GET all students, POST create student.
-// ---------------------------------------------------------------
-
+// src/app/api/students/route.js
 export async function GET(request) {
   const token = request.headers.get("Authorization");
 
   const response = await fetch("https://api-kinderbeam.onrender.com/api/students/", {
-    method: "GET",
-    headers: {
-      "Accept": "application/json",
-      "Authorization": token,
-    },
+    headers: { "Accept": "application/json", "Authorization": token },
   });
 
   const data = await response.json();
