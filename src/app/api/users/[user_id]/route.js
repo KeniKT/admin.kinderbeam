@@ -1,18 +1,10 @@
-// ---------------------------------------------------------------
-// src/app/api/users/[user_id]/route.js  →  route: /api/users/:user_id
-// Server-side proxy for single user operations — avoids CORS.
-// ---------------------------------------------------------------
-
+// src/app/api/users/[user_id]/route.js
 export async function GET(request, { params }) {
-  const token = request.headers.get("Authorization");
   const { user_id } = await params;
+  const token = request.headers.get("Authorization");
 
   const response = await fetch(`https://api-kinderbeam.onrender.com/api/users/${user_id}/`, {
-    method: "GET",
-    headers: {
-      "Accept": "application/json",
-      "Authorization": token,
-    },
+    headers: { "Accept": "application/json", "Authorization": token },
   });
 
   const data = await response.json();
@@ -20,8 +12,8 @@ export async function GET(request, { params }) {
 }
 
 export async function PATCH(request, { params }) {
-  const token = request.headers.get("Authorization");
   const { user_id } = await params;
+  const token = request.headers.get("Authorization");
   const body = await request.json();
 
   const response = await fetch(`https://api-kinderbeam.onrender.com/api/users/${user_id}/`, {
@@ -39,20 +31,15 @@ export async function PATCH(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
-  const token = request.headers.get("Authorization");
   const { user_id } = await params;
+  const token = request.headers.get("Authorization");
 
   const response = await fetch(`https://api-kinderbeam.onrender.com/api/users/${user_id}/`, {
     method: "DELETE",
-    headers: {
-      "Authorization": token,
-    },
+    headers: { "Authorization": token },
   });
 
-  if (response.status === 204) {
-    return new Response(null, { status: 204 });
-  }
-
+  if (response.status === 204) return new Response(null, { status: 204 });
   const data = await response.json();
   return Response.json(data, { status: response.status });
 }
