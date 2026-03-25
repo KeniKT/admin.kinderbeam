@@ -1,7 +1,7 @@
 "use client";
 // ---------------------------------------------------------------
 // src/app/page.jsx  →  route: /
-// This is the Login page (the first page users see).
+// Login page — calls server-side route, checks role, stores tokens.
 // ---------------------------------------------------------------
 
 import { useState } from "react";
@@ -13,16 +13,46 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    setError("");
 
     if (!username || !password) {
       setError("Please enter both username and password");
       return;
     }
 
-    router.push("/dashboard");
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/auth/login/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Store tokens and user info
+        localStorage.setItem("accessToken", data.access);
+        localStorage.setItem("refreshToken", data.refresh);
+        localStorage.setItem("user", JSON.stringify(data.user));
+
+        router.push("/dashboard");
+      } else {
+        setError(data.detail || "Invalid username or password.");
+      }
+    } catch (err) {
+      setError("Unable to connect to server. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -35,7 +65,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="flex flex-col gap-6 font-semibold">
           {error && (
-            <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+            <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm font-normal">
               {error}
             </div>
           )}
@@ -46,22 +76,25 @@ export default function LoginPage() {
               placeholder="Username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full p-3 bg-cream border border-medium-cream rounded-lg text-sm text-dark-blue placeholder-medium-cream focus:outline-none"
+              disabled={loading}
+              className="w-full p-3 bg-cream border border-medium-cream rounded-lg text-sm text-dark-blue placeholder-medium-cream focus:outline-none disabled:opacity-50"
             />
             <input
               type="password"
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 bg-cream border border-medium-cream rounded-lg text-sm text-dark-blue placeholder-medium-cream focus:outline-none"
+              disabled={loading}
+              className="w-full p-3 bg-cream border border-medium-cream rounded-lg text-sm text-dark-blue placeholder-medium-cream focus:outline-none disabled:opacity-50"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full p-3 bg-light-blue text-white rounded-lg text-sm hover:bg-light-blue/90 transition-colors cursor-pointer"
+            disabled={loading}
+            className="w-full p-3 bg-light-blue text-white rounded-lg text-sm hover:bg-light-blue/90 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Login
+            {loading ? "Logging in..." : "Login"}
           </button>
         </form>
       </div>

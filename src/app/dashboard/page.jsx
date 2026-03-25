@@ -1,9 +1,11 @@
 "use client";
 // ---------------------------------------------------------------
 // src/app/dashboard/page.jsx  →  route: /dashboard
-// Main dashboard with overview stats, animated charts, and recent activity.
+// Main dashboard — fetches real user and student counts from API.
 // ---------------------------------------------------------------
 
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import {
@@ -16,7 +18,7 @@ import {
 } from "recharts";
 
 // ---------------------------------------------------------------
-// Chart mock data
+// Static mock data (posts + emergencies — not from API yet)
 // ---------------------------------------------------------------
 const weeklyPostsData = [
   { day: "Mon", accepted: 8,  rejected: 2, pending: 4 },
@@ -37,19 +39,12 @@ const emergencyData = [
   { month: "Jun", active: 1,  resolved: 12 },
 ];
 
-const profileData = [
-  { name: "Teachers",   value: 12  },
-  { name: "Moderators", value: 4   },
-  { name: "Parents",    value: 38  },
-  { name: "Students",   value: 124 },
-];
-
 const PIE_COLORS = ["#00A3FF", "#A07060", "#1E3A5F", "#CAA897"];
 
 // ---------------------------------------------------------------
 // Reusable components
 // ---------------------------------------------------------------
-function StatCard({ icon: Icon, label, value, accent }) {
+function StatCard({ icon: Icon, label, value, accent, loading }) {
   return (
     <div className="flex flex-col bg-light-cream rounded-xl p-4 gap-3 flex-1">
       <div className="flex flex-row justify-between items-start">
@@ -58,7 +53,11 @@ function StatCard({ icon: Icon, label, value, accent }) {
           <Icon size={16} style={{ color: accent }} />
         </div>
       </div>
-      <p className="text-4xl font-normal text-dark-blue">{value}</p>
+      {loading ? (
+        <div className="h-10 w-16 bg-cream rounded-lg animate-pulse" />
+      ) : (
+        <p className="text-4xl font-normal text-dark-blue">{value}</p>
+      )}
     </div>
   );
 }
@@ -131,9 +130,69 @@ function ChartTooltip({ active, payload, label }) {
 // Page
 // ---------------------------------------------------------------
 export default function DashboardPage() {
+  const router = useRouter();
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
+
+  // Real counts from API
+  const [teachers,   setTeachers]   = useState(0);
+  const [moderators, setModerators] = useState(0);
+  const [parents,    setParents]    = useState(0);
+  const [students,   setStudents]   = useState(0);
+  const [loading,    setLoading]    = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem("accessToken");
+    if (!token) { router.push("/"); return; }
+    fetchCounts(token);
+  }, []);
+
+  const fetchCounts = async (token) => {
+    try {
+      // Fetch users and students in parallel
+      const [usersRes, studentsRes] = await Promise.all([
+        fetch("/api/users/", {
+          headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" },
+        }),
+        fetch("/api/students/", {
+          headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" },
+        }),
+      ]);
+
+      // Handle 401 — token expired
+      if (usersRes.status === 401 || studentsRes.status === 401) {
+        localStorage.clear();
+        router.push("/");
+        return;
+      }
+
+      if (usersRes.ok) {
+        const users = await usersRes.json();
+        // role_id: 1 = Teacher, 3 = Moderator, 4 = Parent
+        setTeachers(users.filter(u => u.role_id === 1).length);
+        setModerators(users.filter(u => u.role_id === 3).length);
+        setParents(users.filter(u => u.role_id === 4).length);
+      }
+
+      if (studentsRes.ok) {
+        const studentsData = await studentsRes.json();
+        setStudents(studentsData.length);
+      }
+    } catch (err) {
+      console.error("Failed to fetch counts:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Build live pie chart data from real counts
+  const profileData = [
+    { name: "Teachers",   value: teachers   },
+    { name: "Moderators", value: moderators },
+    { name: "Parents",    value: parents    },
+    { name: "Students",   value: students   },
+  ];
 
   return (
     <>
@@ -150,12 +209,12 @@ export default function DashboardPage() {
             <p className="text-sm text-dark-cream font-medium">{today}</p>
           </div>
 
-          {/* Top stat strip */}
+          {/* Top stat strip — real data */}
           <div className="flex flex-row gap-4 mb-6">
-            <StatCard icon={FiUserCheck}  label="Teachers"   value="12"  accent="#00A3FF" />
-            <StatCard icon={FiShield}     label="Moderators" value="4"   accent="#A07060" />
-            <StatCard icon={FiUsers}      label="Parents"    value="38"  accent="#1E3A5F" />
-            <StatCard icon={FiTrendingUp} label="Students"   value="124" accent="#00A3FF" />
+            <StatCard icon={FiUserCheck}  label="Teachers"   value={teachers}   accent="#00A3FF" loading={loading} />
+            <StatCard icon={FiShield}     label="Moderators" value={moderators} accent="#A07060" loading={loading} />
+            <StatCard icon={FiUsers}      label="Parents"    value={parents}    accent="#1E3A5F" loading={loading} />
+            <StatCard icon={FiTrendingUp} label="Students"   value={students}   accent="#00A3FF" loading={loading} />
           </div>
 
           {/* Charts row */}
@@ -201,30 +260,36 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Profile distribution donut chart */}
+            {/* Profile distribution donut chart — real data */}
             <div className="flex flex-col bg-cream rounded-2xl p-5 flex-1">
               <SectionHeader title="User Distribution" />
               <div className="bg-light-cream rounded-xl p-4 flex flex-col items-center">
-                <ResponsiveContainer width="100%" height={160}>
-                  <PieChart>
-                    <Pie
-                      data={profileData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={45}
-                      outerRadius={70}
-                      paddingAngle={3}
-                      dataKey="value"
-                      animationBegin={0}
-                      animationDuration={1200}
-                    >
-                      {profileData.map((_, i) => (
-                        <Cell key={i} fill={PIE_COLORS[i]} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<ChartTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
+                {loading ? (
+                  <div className="w-full h-[160px] flex items-center justify-center">
+                    <div className="w-24 h-24 rounded-full border-4 border-cream border-t-light-blue animate-spin" />
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={160}>
+                    <PieChart>
+                      <Pie
+                        data={profileData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={45}
+                        outerRadius={70}
+                        paddingAngle={3}
+                        dataKey="value"
+                        animationBegin={0}
+                        animationDuration={1200}
+                      >
+                        {profileData.map((_, i) => (
+                          <Cell key={i} fill={PIE_COLORS[i]} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<ChartTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
                 <div className="flex flex-col gap-1 w-full mt-1">
                   {profileData.map((d, i) => (
                     <div key={d.name} className="flex flex-row items-center justify-between">
@@ -232,7 +297,7 @@ export default function DashboardPage() {
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[i] }} />
                         <p className="text-xs font-semibold text-dark-cream">{d.name}</p>
                       </div>
-                      <p className="text-xs font-bold text-dark-blue">{d.value}</p>
+                      <p className="text-xs font-bold text-dark-blue">{loading ? "—" : d.value}</p>
                     </div>
                   ))}
                 </div>
