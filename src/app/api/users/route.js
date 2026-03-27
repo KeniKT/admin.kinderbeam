@@ -8,10 +8,7 @@ export async function GET(request) {
 
   const response = await fetch("https://api-kinderbeam.onrender.com/api/users/", {
     method: "GET",
-    headers: {
-      "Accept": "application/json",
-      "Authorization": token,
-    },
+    headers: { "Accept": "application/json", "Authorization": token },
   });
 
   const data = await response.json();
@@ -20,7 +17,7 @@ export async function GET(request) {
 
 export async function POST(request) {
   const token = request.headers.get("Authorization");
-  const body = await request.json();
+  const body  = await request.json();
 
   const response = await fetch("https://api-kinderbeam.onrender.com/api/users/", {
     method: "POST",
