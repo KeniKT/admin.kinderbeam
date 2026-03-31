@@ -1,7 +1,7 @@
 "use client";
 // ---------------------------------------------------------------
 // src/app/dashboard/page.jsx  →  route: /dashboard
-// Main dashboard — fetches real user and student counts from API.
+// Fully responsive dashboard with real API counts + charts.
 // ---------------------------------------------------------------
 
 import { useState, useEffect } from "react";
@@ -9,17 +9,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import {
-  FiArrowUpRight, FiUsers, FiUserCheck, FiAlertCircle,
-  FiCheckCircle, FiClock, FiXCircle, FiTrendingUp, FiShield,
+  FiArrowUpRight, FiUsers, FiUserCheck,
+  FiCheckCircle, FiClock, FiXCircle, FiTrendingUp, FiShield, FiAlertCircle,
 } from "react-icons/fi";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
-// ---------------------------------------------------------------
-// Static mock data (posts + emergencies — not from API yet)
-// ---------------------------------------------------------------
 const weeklyPostsData = [
   { day: "Mon", accepted: 8,  rejected: 2, pending: 4 },
   { day: "Tue", accepted: 14, rejected: 3, pending: 2 },
@@ -41,22 +38,19 @@ const emergencyData = [
 
 const PIE_COLORS = ["#00A3FF", "#A07060", "#1E3A5F", "#CAA897"];
 
-// ---------------------------------------------------------------
-// Reusable components
-// ---------------------------------------------------------------
 function StatCard({ icon: Icon, label, value, accent, loading }) {
   return (
-    <div className="flex flex-col bg-light-cream rounded-xl p-4 gap-3 flex-1">
+    <div className="flex flex-col bg-light-cream rounded-xl p-4 gap-2 flex-1 min-w-0">
       <div className="flex flex-row justify-between items-start">
-        <p className="text-sm font-semibold text-dark-cream uppercase tracking-widest">{label}</p>
-        <div className="p-2 rounded-lg" style={{ backgroundColor: accent + "22" }}>
-          <Icon size={16} style={{ color: accent }} />
+        <p className="text-xs font-semibold text-dark-cream uppercase tracking-widest">{label}</p>
+        <div className="p-2 rounded-lg shrink-0" style={{ backgroundColor: accent + "22" }}>
+          <Icon size={14} style={{ color: accent }} />
         </div>
       </div>
       {loading ? (
-        <div className="h-10 w-16 bg-cream rounded-lg animate-pulse" />
+        <div className="h-8 w-12 bg-cream rounded-lg animate-pulse" />
       ) : (
-        <p className="text-4xl font-normal text-dark-blue">{value}</p>
+        <p className="text-3xl sm:text-4xl font-normal text-dark-blue">{value}</p>
       )}
     </div>
   );
@@ -71,7 +65,7 @@ function Badge({ label, color }) {
     resolved: "bg-blue-100 text-blue-700",
   };
   return (
-    <span className={`px-3 py-1 rounded-full text-xs font-bold ${colors[color]}`}>
+    <span className={`px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap ${colors[color]}`}>
       {label}
     </span>
   );
@@ -79,19 +73,19 @@ function Badge({ label, color }) {
 
 function ActivityRow({ name, role, action, time, status }) {
   return (
-    <div className="flex flex-row items-center justify-between py-3 border-b border-cream last:border-0">
-      <div className="flex flex-row items-center gap-3">
-        <div className="size-9 rounded-full bg-cream flex items-center justify-center text-dark-blue font-bold text-sm">
+    <div className="flex flex-row items-center justify-between py-3 border-b border-cream last:border-0 gap-2">
+      <div className="flex flex-row items-center gap-2 min-w-0">
+        <div className="size-8 rounded-full bg-cream flex items-center justify-center text-dark-blue font-bold text-xs shrink-0">
           {name.charAt(0)}
         </div>
-        <div>
-          <p className="text-sm font-semibold text-dark-blue">{name}</p>
-          <p className="text-xs text-dark-cream">{role} · {action}</p>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-dark-blue truncate">{name}</p>
+          <p className="text-xs text-dark-cream truncate">{role} · {action}</p>
         </div>
       </div>
-      <div className="flex flex-row items-center gap-3">
+      <div className="flex flex-row items-center gap-2 shrink-0">
         <Badge label={status} color={status} />
-        <p className="text-xs text-dark-cream w-16 text-right">{time}</p>
+        <p className="text-xs text-dark-cream hidden sm:block">{time}</p>
       </div>
     </div>
   );
@@ -100,11 +94,11 @@ function ActivityRow({ name, role, action, time, status }) {
 function SectionHeader({ title, href }) {
   return (
     <div className="flex flex-row justify-between items-center mb-3">
-      <p className="text-lg font-bold text-dark-blue">{title}</p>
+      <p className="text-base sm:text-lg font-bold text-dark-blue">{title}</p>
       {href && (
         <Link href={href}>
           <div className="flex items-center gap-1 text-light-blue text-xs font-semibold hover:underline">
-            View all <FiArrowUpRight size={14} />
+            View all <FiArrowUpRight size={13} />
           </div>
         </Link>
       )}
@@ -115,8 +109,8 @@ function SectionHeader({ title, href }) {
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-cream rounded-xl px-4 py-3 shadow-lg">
-      <p className="text-xs font-bold text-dark-cream uppercase mb-2">{label}</p>
+    <div className="bg-white border border-cream rounded-xl px-3 py-2 shadow-lg">
+      <p className="text-xs font-bold text-dark-cream uppercase mb-1">{label}</p>
       {payload.map((p, i) => (
         <p key={i} className="text-xs font-semibold" style={{ color: p.color }}>
           {p.name}: {p.value}
@@ -126,16 +120,12 @@ function ChartTooltip({ active, payload, label }) {
   );
 }
 
-// ---------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------
 export default function DashboardPage() {
   const router = useRouter();
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
 
-  // Real counts from API
   const [teachers,   setTeachers]   = useState(0);
   const [moderators, setModerators] = useState(0);
   const [parents,    setParents]    = useState(0);
@@ -150,34 +140,22 @@ export default function DashboardPage() {
 
   const fetchCounts = async (token) => {
     try {
-      // Fetch users and students in parallel
       const [usersRes, studentsRes] = await Promise.all([
-        fetch("/api/users/", {
-          headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" },
-        }),
-        fetch("/api/students/", {
-          headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" },
-        }),
+        fetch("/api/users/",    { headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" } }),
+        fetch("/api/students/", { headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" } }),
       ]);
-
-      // Handle 401 — token expired
       if (usersRes.status === 401 || studentsRes.status === 401) {
-        localStorage.clear();
-        router.push("/");
-        return;
+        localStorage.clear(); router.push("/"); return;
       }
-
       if (usersRes.ok) {
         const users = await usersRes.json();
-        // role_id: 1 = Teacher, 3 = Moderator, 4 = Parent
         setTeachers(users.filter(u => u.role_id === 1).length);
         setModerators(users.filter(u => u.role_id === 3).length);
         setParents(users.filter(u => u.role_id === 4).length);
       }
-
       if (studentsRes.ok) {
-        const studentsData = await studentsRes.json();
-        setStudents(studentsData.length);
+        const s = await studentsRes.json();
+        setStudents(s.length);
       }
     } catch (err) {
       console.error("Failed to fetch counts:", err);
@@ -186,7 +164,6 @@ export default function DashboardPage() {
     }
   };
 
-  // Build live pie chart data from real counts
   const profileData = [
     { name: "Teachers",   value: teachers   },
     { name: "Moderators", value: moderators },
@@ -198,34 +175,34 @@ export default function DashboardPage() {
     <>
       <Navbar />
       <div className="min-h-screen bg-white text-dark-blue">
-        <div className="max-w-6xl mx-auto px-8 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
           {/* Page header */}
-          <div className="flex flex-row justify-between items-end mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-6">
             <div>
-              <p className="text-sm text-dark-cream font-semibold uppercase tracking-widest mb-1">Overview</p>
-              <h1 className="text-4xl font-bold text-dark-blue">Dashboard</h1>
+              <p className="text-xs text-dark-cream font-semibold uppercase tracking-widest mb-1">Overview</p>
+              <h1 className="text-3xl sm:text-4xl font-bold text-dark-blue">Dashboard</h1>
             </div>
-            <p className="text-sm text-dark-cream font-medium">{today}</p>
+            <p className="text-xs sm:text-sm text-dark-cream font-medium">{today}</p>
           </div>
 
-          {/* Top stat strip — real data */}
-          <div className="flex flex-row gap-4 mb-6">
+          {/* Stat strip — 2 cols on mobile, 4 on sm+ */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
             <StatCard icon={FiUserCheck}  label="Teachers"   value={teachers}   accent="#00A3FF" loading={loading} />
             <StatCard icon={FiShield}     label="Moderators" value={moderators} accent="#A07060" loading={loading} />
             <StatCard icon={FiUsers}      label="Parents"    value={parents}    accent="#1E3A5F" loading={loading} />
             <StatCard icon={FiTrendingUp} label="Students"   value={students}   accent="#00A3FF" loading={loading} />
           </div>
 
-          {/* Charts row */}
-          <div className="flex flex-row gap-4 mb-6">
+          {/* Charts row — stacked on mobile, side by side on lg+ */}
+          <div className="flex flex-col lg:flex-row gap-4 mb-6">
 
             {/* Weekly posts area chart */}
-            <div className="flex flex-col bg-cream rounded-2xl p-5 flex-[2]">
+            <div className="flex flex-col bg-cream rounded-2xl p-4 sm:p-5 flex-[2]">
               <SectionHeader title="Weekly Posts" />
-              <div className="bg-light-cream rounded-xl p-4">
-                <ResponsiveContainer width="100%" height={200}>
-                  <AreaChart data={weeklyPostsData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+              <div className="bg-light-cream rounded-xl p-3 sm:p-4">
+                <ResponsiveContainer width="100%" height={180}>
+                  <AreaChart data={weeklyPostsData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradAccepted" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%"  stopColor="#00A3FF" stopOpacity={0.3} />
@@ -241,15 +218,15 @@ export default function DashboardPage() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F2EAE6" />
-                    <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#A07060", fontWeight: 600 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: "#A07060" }} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#A07060", fontWeight: 600 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: "#A07060" }} axisLine={false} tickLine={false} />
                     <Tooltip content={<ChartTooltip />} />
                     <Area type="monotone" dataKey="accepted" name="Accepted" stroke="#00A3FF" strokeWidth={2} fill="url(#gradAccepted)" dot={false} animationDuration={1200} />
                     <Area type="monotone" dataKey="rejected" name="Rejected" stroke="#A07060" strokeWidth={2} fill="url(#gradRejected)" dot={false} animationDuration={1400} />
                     <Area type="monotone" dataKey="pending"  name="Pending"  stroke="#CAA897" strokeWidth={2} fill="url(#gradPending)"  dot={false} animationDuration={1600} />
                   </AreaChart>
                 </ResponsiveContainer>
-                <div className="flex flex-row gap-4 mt-2 justify-center">
+                <div className="flex flex-row gap-4 mt-2 justify-center flex-wrap">
                   {[["Accepted","#00A3FF"],["Rejected","#A07060"],["Pending","#CAA897"]].map(([name, color]) => (
                     <div key={name} className="flex items-center gap-1">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
@@ -260,31 +237,19 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Profile distribution donut chart — real data */}
-            <div className="flex flex-col bg-cream rounded-2xl p-5 flex-1">
+            {/* Donut chart */}
+            <div className="flex flex-col bg-cream rounded-2xl p-4 sm:p-5 flex-1">
               <SectionHeader title="User Distribution" />
-              <div className="bg-light-cream rounded-xl p-4 flex flex-col items-center">
+              <div className="bg-light-cream rounded-xl p-3 sm:p-4 flex flex-col items-center">
                 {loading ? (
-                  <div className="w-full h-[160px] flex items-center justify-center">
-                    <div className="w-24 h-24 rounded-full border-4 border-cream border-t-light-blue animate-spin" />
+                  <div className="w-full h-[140px] flex items-center justify-center">
+                    <div className="w-20 h-20 rounded-full border-4 border-cream border-t-light-blue animate-spin" />
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={160}>
+                  <ResponsiveContainer width="100%" height={140}>
                     <PieChart>
-                      <Pie
-                        data={profileData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={45}
-                        outerRadius={70}
-                        paddingAngle={3}
-                        dataKey="value"
-                        animationBegin={0}
-                        animationDuration={1200}
-                      >
-                        {profileData.map((_, i) => (
-                          <Cell key={i} fill={PIE_COLORS[i]} />
-                        ))}
+                      <Pie data={profileData} cx="50%" cy="50%" innerRadius={40} outerRadius={60} paddingAngle={3} dataKey="value" animationBegin={0} animationDuration={1200}>
+                        {profileData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
                       </Pie>
                       <Tooltip content={<ChartTooltip />} />
                     </PieChart>
@@ -305,31 +270,31 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Middle row */}
-          <div className="flex flex-row gap-4 mb-6">
+          {/* Middle row — stacked on mobile, 3 cols on lg+ */}
+          <div className="flex flex-col lg:flex-row gap-4 mb-6">
 
             {/* Posts today */}
-            <div className="flex flex-col bg-cream rounded-2xl p-5 flex-1">
+            <div className="flex flex-col bg-cream rounded-2xl p-4 sm:p-5 flex-1">
               <SectionHeader title="Posts Today" href="#" />
-              <div className="flex flex-col bg-light-cream rounded-xl p-4 gap-4">
+              <div className="flex flex-col bg-light-cream rounded-xl p-4 gap-3">
                 <div className="flex flex-row items-end gap-2">
-                  <p className="text-6xl font-normal text-dark-cream">18</p>
-                  <p className="text-lg pb-2 text-dark-blue font-semibold">Total Posts</p>
+                  <p className="text-5xl sm:text-6xl font-normal text-dark-cream">18</p>
+                  <p className="text-base sm:text-lg pb-2 text-dark-blue font-semibold">Total</p>
                 </div>
-                <div className="flex flex-row gap-3">
+                <div className="flex flex-row gap-2">
                   <div className="flex flex-col flex-1 items-center bg-cream rounded-xl p-3 gap-1">
-                    <FiClock size={18} className="text-yellow-500" />
-                    <p className="text-2xl font-normal text-dark-blue">7</p>
+                    <FiClock size={16} className="text-yellow-500" />
+                    <p className="text-xl font-normal text-dark-blue">7</p>
                     <p className="text-xs font-semibold text-dark-cream">Pending</p>
                   </div>
                   <div className="flex flex-col flex-1 items-center bg-cream rounded-xl p-3 gap-1">
-                    <FiCheckCircle size={18} className="text-green-500" />
-                    <p className="text-2xl font-normal text-dark-blue">9</p>
+                    <FiCheckCircle size={16} className="text-green-500" />
+                    <p className="text-xl font-normal text-dark-blue">9</p>
                     <p className="text-xs font-semibold text-dark-cream">Accepted</p>
                   </div>
                   <div className="flex flex-col flex-1 items-center bg-cream rounded-xl p-3 gap-1">
-                    <FiXCircle size={18} className="text-red-400" />
-                    <p className="text-2xl font-normal text-dark-blue">2</p>
+                    <FiXCircle size={16} className="text-red-400" />
+                    <p className="text-xl font-normal text-dark-blue">2</p>
                     <p className="text-xs font-semibold text-dark-cream">Rejected</p>
                   </div>
                 </div>
@@ -337,14 +302,14 @@ export default function DashboardPage() {
             </div>
 
             {/* Emergencies bar chart */}
-            <div className="flex flex-col bg-cream rounded-2xl p-5 flex-1">
+            <div className="flex flex-col bg-cream rounded-2xl p-4 sm:p-5 flex-1">
               <SectionHeader title="Emergencies (6 months)" href="#" />
-              <div className="bg-light-cream rounded-xl p-4">
-                <ResponsiveContainer width="100%" height={140}>
-                  <BarChart data={emergencyData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }} barSize={10}>
+              <div className="bg-light-cream rounded-xl p-3 sm:p-4">
+                <ResponsiveContainer width="100%" height={130}>
+                  <BarChart data={emergencyData} margin={{ top: 5, right: 5, left: -28, bottom: 0 }} barSize={9}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F2EAE6" />
-                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#A07060", fontWeight: 600 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "#A07060" }} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#A07060", fontWeight: 600 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9, fill: "#A07060" }} axisLine={false} tickLine={false} />
                     <Tooltip content={<ChartTooltip />} />
                     <Bar dataKey="active"   name="Active"   fill="#F97316" radius={[4,4,0,0]} animationDuration={1200} />
                     <Bar dataKey="resolved" name="Resolved" fill="#00A3FF" radius={[4,4,0,0]} animationDuration={1400} />
@@ -362,39 +327,39 @@ export default function DashboardPage() {
             </div>
 
             {/* Quick links */}
-            <div className="flex flex-col bg-cream rounded-2xl p-5 w-56">
+            <div className="flex flex-col bg-cream rounded-2xl p-4 sm:p-5 lg:w-52">
               <SectionHeader title="Quick Links" />
               <div className="flex flex-col gap-2">
                 <Link href="/accounts/new">
                   <div className="flex flex-row items-center justify-between bg-light-blue text-white rounded-xl px-4 py-3 hover:bg-light-blue/90 transition-colors cursor-pointer">
                     <p className="text-sm font-semibold">Add Account</p>
-                    <FiArrowUpRight size={16} />
+                    <FiArrowUpRight size={15} />
                   </div>
                 </Link>
                 <Link href="/students/new">
                   <div className="flex flex-row items-center justify-between bg-dark-blue text-white rounded-xl px-4 py-3 hover:bg-dark-blue/90 transition-colors cursor-pointer">
                     <p className="text-sm font-semibold">Add Student</p>
-                    <FiArrowUpRight size={16} />
+                    <FiArrowUpRight size={15} />
                   </div>
                 </Link>
                 <Link href="/accounts">
                   <div className="flex flex-row items-center justify-between bg-light-cream border border-medium-cream text-dark-blue rounded-xl px-4 py-3 hover:bg-cream transition-colors cursor-pointer">
                     <p className="text-sm font-semibold">All Accounts</p>
-                    <FiArrowUpRight size={16} />
+                    <FiArrowUpRight size={15} />
                   </div>
                 </Link>
                 <Link href="/students">
                   <div className="flex flex-row items-center justify-between bg-light-cream border border-medium-cream text-dark-blue rounded-xl px-4 py-3 hover:bg-cream transition-colors cursor-pointer">
                     <p className="text-sm font-semibold">All Students</p>
-                    <FiArrowUpRight size={16} />
+                    <FiArrowUpRight size={15} />
                   </div>
                 </Link>
               </div>
             </div>
           </div>
 
-          {/* Recent activity feed */}
-          <div className="flex flex-col bg-cream rounded-2xl p-5">
+          {/* Recent activity */}
+          <div className="flex flex-col bg-cream rounded-2xl p-4 sm:p-5">
             <SectionHeader title="Recent Activity" href="#" />
             <div className="flex flex-col bg-light-cream rounded-xl px-4">
               <ActivityRow name="Sara Tesfaye"   role="Parent"    action="Submitted a post"  time="2m ago"  status="pending"  />
