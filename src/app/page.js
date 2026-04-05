@@ -1,7 +1,7 @@
 "use client";
 // ---------------------------------------------------------------
 // src/app/page.jsx  →  route: /
-// Login page — calls server-side route, checks role, stores tokens.
+// Login page — responsive for all screen sizes.
 // ---------------------------------------------------------------
 
 import { useState } from "react";
@@ -12,8 +12,8 @@ export default function LoginPage() {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error,    setError]    = useState("");
+  const [loading,  setLoading]  = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -29,26 +29,21 @@ export default function LoginPage() {
     try {
       const response = await fetch("/api/auth/login/", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
         body: JSON.stringify({ username, password }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        // Store tokens and user info
         localStorage.setItem("accessToken", data.access);
         localStorage.setItem("refreshToken", data.refresh);
         localStorage.setItem("user", JSON.stringify(data.user));
-
         router.push("/dashboard");
       } else {
-        setError(data.detail || "Invalid username or password.");
+        setError(data.detail || data.non_field_errors?.[0] || "Invalid username or password.");
       }
-    } catch (err) {
+    } catch {
       setError("Unable to connect to server. Please try again.");
     } finally {
       setLoading(false);
@@ -56,11 +51,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center text-dark-blue">
+    <div className="min-h-screen bg-white flex items-center justify-center px-4 text-dark-blue">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2">Welcome.</h1>
-          <p className="text-md font-medium">Enter your username and password.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome.</h1>
+          <p className="text-sm sm:text-md font-medium">Enter your username and password.</p>
         </div>
 
         <form onSubmit={handleLogin} className="flex flex-col gap-6 font-semibold">
