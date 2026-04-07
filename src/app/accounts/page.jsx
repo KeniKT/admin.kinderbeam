@@ -1,35 +1,74 @@
 "use client";
 // ---------------------------------------------------------------
 // src/app/accounts/page.jsx  →  route: /accounts
-// Shows a searchable, paginated table of all accounts.
+// Shows a searchable, paginated table of all accounts from the API.
 // ---------------------------------------------------------------
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { FiEdit, FiArrowLeft, FiArrowRight, FiPlus } from "react-icons/fi";
 
-// Mock data — replace with API fetch later
-const MOCK_ACCOUNTS = [
-  { id: 1, fullName: "Abebe Kebede", username: "akebede", phoneNumber: "+251 91 123 4567", email: "abebe.k@mail.com", role: "teacher" },
-  { id: 2, fullName: "Sara Tesfaye", username: "stefsaye", phoneNumber: "+251 92 234 5678", email: "sara.t@mail.com", role: "parent" },
-  { id: 3, fullName: "Mulugeta Haile", username: "mhaile", phoneNumber: "+251 93 345 6789", email: "mulu.h@mail.com", role: "moderator" },
-  { id: 4, fullName: "Tigist Belay", username: "tbelay", phoneNumber: "+251 94 456 7890", email: "tigist.b@mail.com", role: "teacher" },
-  { id: 5, fullName: "Dawit Yohannes", username: "dyohannes", phoneNumber: "+251 95 567 8901", email: "dawit.y@mail.com", role: "parent" },
-  { id: 6, fullName: "Etenesh Walelign", username: "ewalelign", phoneNumber: "+251 96 678 9012", email: "etenesh.w@mail.com", role: "teacher" },
-  { id: 7, fullName: "Samuel Getachew", username: "sgetachew", phoneNumber: "+251 97 789 0123", email: "sammy.g@mail.com", role: "moderator" },
-  { id: 8, fullName: "Hiwot Alemu", username: "halemu", phoneNumber: "+251 98 890 1234", email: "hiwot.a@mail.com", role: "parent" },
-];
-
 const RECORDS_PER_PAGE = 5;
 
+// Map role_id to readable name
+const ROLE_NAMES = {
+  1: "Teacher",
+  2: "Admin",
+  3: "Moderator",
+  4: "Parent",
+};
+
 export default function AccountsPage() {
-  const [accounts] = useState(MOCK_ACCOUNTS);
+  const router = useRouter();
+
+  const [accounts, setAccounts]     = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState("");
+
+  useEffect(() => {
+    const token = localStorage.getItem("accessToken");
+    if (!token) { router.push("/"); return; }
+    fetchAccounts(token);
+  }, []);
+
+  const fetchAccounts = async (token) => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/users/", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/json",
+        },
+      });
+
+      if (response.status === 401) {
+        localStorage.clear();
+        router.push("/");
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        setAccounts(data);
+      } else {
+        setError("Failed to load accounts.");
+      }
+    } catch (err) {
+      setError("Unable to connect to server.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredAccounts = accounts.filter((acc) =>
-    acc.fullName.toLowerCase().includes(searchTerm.toLowerCase())
+    `${acc.first_name} ${acc.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    acc.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    acc.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const nPages = Math.ceil(filteredAccounts.length / RECORDS_PER_PAGE) || 1;
@@ -41,6 +80,7 @@ export default function AccountsPage() {
       <Navbar />
       <div className="flex flex-col h-full w-full bg-white text-dark-blue font-semibold items-center">
         <div className="flex flex-col py-4 w-[50%] gap-4">
+
           {/* Page header */}
           <div className="flex flex-row justify-between items-center h-12">
             <p className="text-3xl">All Accounts</p>
@@ -52,7 +92,6 @@ export default function AccountsPage() {
                 onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 className="px-4 w-64 h-full bg-cream border border-medium-cream rounded-lg text-sm text-dark-blue placeholder-medium-cream focus:outline-none"
               />
-              {/* Link to the Add Account page */}
               <Link href="/accounts/new">
                 <button className="flex flex-row items-center gap-2 px-4 h-full bg-light-blue text-white rounded-lg text-sm hover:bg-light-blue/90 transition-colors cursor-pointer">
                   <FiPlus size={22} />
@@ -66,42 +105,51 @@ export default function AccountsPage() {
           <div className="flex flex-row gap-4">
             <div className="flex flex-col bg-cream w-full rounded-lg p-4 items-center">
               <div className="flex flex-col bg-light-cream w-full items-center rounded-lg p-4 gap-2">
-                <table className="w-full text-center text-dark-blue border-collapse">
-                  <thead>
-                    <tr className="border-b-2 border-medium-cream text-sm uppercase font-bold">
-                      <th className="p-4">Full Name</th>
-                      <th className="p-4">Username</th>
-                      <th className="p-4">Phone Number</th>
-                      <th className="p-4">Email</th>
-                      <th className="p-4">Role</th>
-                      <th className="p-4"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentRecords.length > 0 ? (
-                      currentRecords.map((account) => (
-                        <tr key={account.id} className="border-t-2 border-cream hover:bg-cream font-medium">
-                          <td className="p-4">{account.fullName}</td>
-                          <td className="p-4">{account.username}</td>
-                          <td className="p-4">{account.phoneNumber}</td>
-                          <td className="p-4">{account.email}</td>
-                          <td className="p-4">{account.role}</td>
-                          <td className="p-4">
-                            <button className="text-light-blue cursor-pointer">
-                              <FiEdit size={24} />
-                            </button>
+
+                {loading ? (
+                  <div className="p-10 text-center text-dark-cream">Loading accounts...</div>
+                ) : error ? (
+                  <div className="p-10 text-center text-red-500">{error}</div>
+                ) : (
+                  <table className="w-full text-center text-dark-blue border-collapse">
+                    <thead>
+                      <tr className="border-b-2 border-medium-cream text-sm uppercase font-bold">
+                        <th className="p-4">Full Name</th>
+                        <th className="p-4">Username</th>
+                        <th className="p-4">Phone</th>
+                        <th className="p-4">Email</th>
+                        <th className="p-4">Role</th>
+                        <th className="p-4"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentRecords.length > 0 ? (
+                        currentRecords.map((account) => (
+                          <tr key={account.user_id} className="border-t-2 border-cream hover:bg-cream font-medium transition-colors">
+                            <td className="p-4">{account.first_name} {account.last_name}</td>
+                            <td className="p-4">{account.username}</td>
+                            <td className="p-4">{account.phone_number || "—"}</td>
+                            <td className="p-4">{account.email}</td>
+                            <td className="p-4">{ROLE_NAMES[account.role_id] || "Unknown"}</td>
+                            <td className="p-4">
+                              <Link href={`/accounts/${account.user_id}/edit`}>
+                                <button className="text-light-blue cursor-pointer hover:text-light-blue/70 transition-colors">
+                                  <FiEdit size={24} />
+                                </button>
+                              </Link>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="p-10 text-gray-400 italic">
+                            {searchTerm ? `No accounts match "${searchTerm}"` : "No accounts found"}
                           </td>
                         </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={6} className="p-10 text-gray-400 italic">
-                          No accounts match "{searchTerm}"
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                      )}
+                    </tbody>
+                  </table>
+                )}
               </div>
 
               {/* Pagination */}
@@ -126,6 +174,7 @@ export default function AccountsPage() {
               </div>
             </div>
           </div>
+
         </div>
       </div>
     </>
