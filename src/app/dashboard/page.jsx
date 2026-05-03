@@ -1,7 +1,7 @@
 "use client";
 // ---------------------------------------------------------------
 // src/app/dashboard/page.jsx  →  route: /dashboard
-// Fully responsive dashboard with real API counts + charts.
+// Fully responsive dashboard with real API data for all sections.
 // ---------------------------------------------------------------
 
 import { useState, useEffect } from "react";
@@ -17,27 +17,98 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
-const weeklyPostsData = [
-  { day: "Mon", accepted: 8,  rejected: 2, pending: 4 },
-  { day: "Tue", accepted: 14, rejected: 3, pending: 2 },
-  { day: "Wed", accepted: 6,  rejected: 1, pending: 1 },
-  { day: "Thu", accepted: 18, rejected: 4, pending: 2 },
-  { day: "Fri", accepted: 11, rejected: 2, pending: 2 },
-  { day: "Sat", accepted: 5,  rejected: 1, pending: 0 },
-  { day: "Sun", accepted: 9,  rejected: 2, pending: 7 },
-];
-
-const emergencyData = [
-  { month: "Jan", active: 3,  resolved: 5  },
-  { month: "Feb", active: 1,  resolved: 8  },
-  { month: "Mar", active: 4,  resolved: 6  },
-  { month: "Apr", active: 2,  resolved: 9  },
-  { month: "May", active: 5,  resolved: 7  },
-  { month: "Jun", active: 1,  resolved: 12 },
-];
-
 const PIE_COLORS = ["#00A3FF", "#A07060", "#1E3A5F", "#CAA897"];
 
+// ---------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------
+
+// Returns "Mon", "Tue", etc. for a date
+function getDayLabel(dateStr) {
+  return new Date(dateStr).toLocaleDateString("en-US", { weekday: "short" });
+}
+
+// Returns "Jan", "Feb", etc. for a date
+function getMonthLabel(dateStr) {
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short" });
+}
+
+// Check if a date string is today
+function isToday(dateStr) {
+  const d = new Date(dateStr);
+  const now = new Date();
+  return d.getDate() === now.getDate() &&
+    d.getMonth() === now.getMonth() &&
+    d.getFullYear() === now.getFullYear();
+}
+
+// Check if a date string is within the last N days
+function isWithinDays(dateStr, days) {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diff = (now - d) / (1000 * 60 * 60 * 24);
+  return diff >= 0 && diff < days;
+}
+
+// Check if a date string is within the current month
+function isThisMonth(dateStr) {
+  const d = new Date(dateStr);
+  const now = new Date();
+  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+}
+
+// Build weekly posts chart data (last 7 days, grouped by day)
+function buildWeeklyPostsData(posts) {
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const map = {};
+  days.forEach(d => { map[d] = { day: d, approved: 0, rejected: 0, pending: 0 }; });
+
+  posts
+    .filter(p => isWithinDays(p.created_at, 7))
+    .forEach(p => {
+      const day = getDayLabel(p.created_at);
+      if (map[day]) {
+        if (p.status === "approved") map[day].approved++;
+        else if (p.status === "rejected") map[day].rejected++;
+        else map[day].pending++;
+      }
+    });
+
+  // Return in order starting from today going back 7 days
+  const today = new Date().getDay();
+  const ordered = [];
+  for (let i = 6; i >= 0; i--) {
+    const idx = (today - i + 7) % 7;
+    ordered.push(map[days[idx]]);
+  }
+  return ordered;
+}
+
+// Build monthly emergencies chart data (this month, grouped by day of week)
+function buildEmergencyData(emergencies) {
+  const weeks = ["Week 1", "Week 2", "Week 3", "Week 4"];
+  const map = {
+    "Week 1": { month: "Week 1", reported: 0, resolved: 0 },
+    "Week 2": { month: "Week 2", reported: 0, resolved: 0 },
+    "Week 3": { month: "Week 3", reported: 0, resolved: 0 },
+    "Week 4": { month: "Week 4", reported: 0, resolved: 0 },
+  };
+
+  emergencies
+    .filter(e => isThisMonth(e.reported_at))
+    .forEach(e => {
+      const day = new Date(e.reported_at).getDate();
+      const week = day <= 7 ? "Week 1" : day <= 14 ? "Week 2" : day <= 21 ? "Week 3" : "Week 4";
+      if (e.status === "resolved") map[week].resolved++;
+      else map[week].reported++;
+    });
+
+  return weeks.map(w => map[w]);
+}
+
+// ---------------------------------------------------------------
+// Reusable components
+// ---------------------------------------------------------------
 function StatCard({ icon: Icon, label, value, accent, loading }) {
   return (
     <div className="flex flex-col bg-light-cream rounded-xl p-4 gap-2 flex-1 min-w-0">
@@ -59,13 +130,13 @@ function StatCard({ icon: Icon, label, value, accent, loading }) {
 function Badge({ label, color }) {
   const colors = {
     pending:  "bg-yellow-100 text-yellow-700",
-    accepted: "bg-green-100 text-green-700",
+    approved: "bg-green-100 text-green-700",
     rejected: "bg-red-100 text-red-700",
-    active:   "bg-orange-100 text-orange-700",
+    reported: "bg-orange-100 text-orange-700",
     resolved: "bg-blue-100 text-blue-700",
   };
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap ${colors[color]}`}>
+    <span className={`px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap ${colors[color] || "bg-gray-100 text-gray-700"}`}>
       {label}
     </span>
   );
@@ -120,29 +191,43 @@ function ChartTooltip({ active, payload, label }) {
   );
 }
 
+// ---------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------
 export default function DashboardPage() {
   const router = useRouter();
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
 
+  // User/student counts
   const [teachers,   setTeachers]   = useState(0);
   const [moderators, setModerators] = useState(0);
   const [parents,    setParents]    = useState(0);
   const [students,   setStudents]   = useState(0);
-  const [loading,    setLoading]    = useState(true);
+  const [loadingCounts, setLoadingCounts] = useState(true);
+
+  // Posts data
+  const [posts,        setPosts]        = useState([]);
+  const [loadingPosts, setLoadingPosts] = useState(true);
+
+  // Emergencies data
+  const [emergencies,        setEmergencies]        = useState([]);
+  const [loadingEmergencies, setLoadingEmergencies] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
     if (!token) { router.push("/"); return; }
     fetchCounts(token);
+    fetchPosts(token);
+    fetchEmergencies(token);
   }, []);
 
   const fetchCounts = async (token) => {
     try {
       const [usersRes, studentsRes] = await Promise.all([
-        fetch("/api/users/",    { headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" } }),
-        fetch("/api/students/", { headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" } }),
+        fetch("/api/users",    { headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" } }),
+        fetch("/api/students", { headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" } }),
       ]);
       if (usersRes.status === 401 || studentsRes.status === 401) {
         localStorage.clear(); router.push("/"); return;
@@ -160,9 +245,48 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Failed to fetch counts:", err);
     } finally {
-      setLoading(false);
+      setLoadingCounts(false);
     }
   };
+
+  const fetchPosts = async (token) => {
+    try {
+      const response = await fetch("/api/posts", {
+        headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" },
+      });
+      if (response.ok) setPosts(await response.json());
+    } catch (err) {
+      console.error("Failed to fetch posts:", err);
+    } finally {
+      setLoadingPosts(false);
+    }
+  };
+
+  const fetchEmergencies = async (token) => {
+    try {
+      const response = await fetch("/api/emergencies", {
+        headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" },
+      });
+      if (response.ok) setEmergencies(await response.json());
+    } catch (err) {
+      console.error("Failed to fetch emergencies:", err);
+    } finally {
+      setLoadingEmergencies(false);
+    }
+  };
+
+  // Computed values from real data
+  const todayPosts     = posts.filter(p => isToday(p.created_at));
+  const todayPending   = todayPosts.filter(p => p.status === "pending").length;
+  const todayApproved  = todayPosts.filter(p => p.status === "approved").length;
+  const todayRejected  = todayPosts.filter(p => p.status === "rejected").length;
+
+  const thisMonthEmergencies = emergencies.filter(e => isThisMonth(e.reported_at));
+  const reportedCount        = thisMonthEmergencies.filter(e => e.status === "reported").length;
+  const resolvedCount        = thisMonthEmergencies.filter(e => e.status === "resolved").length;
+
+  const weeklyPostsData  = buildWeeklyPostsData(posts);
+  const emergencyData    = buildEmergencyData(emergencies);
 
   const profileData = [
     { name: "Teachers",   value: teachers   },
@@ -186,48 +310,54 @@ export default function DashboardPage() {
             <p className="text-xs sm:text-sm text-dark-cream font-medium">{today}</p>
           </div>
 
-          {/* Stat strip — 2 cols on mobile, 4 on sm+ */}
+          {/* Stat strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-            <StatCard icon={FiUserCheck}  label="Teachers"   value={teachers}   accent="#00A3FF" loading={loading} />
-            <StatCard icon={FiShield}     label="Moderators" value={moderators} accent="#A07060" loading={loading} />
-            <StatCard icon={FiUsers}      label="Parents"    value={parents}    accent="#1E3A5F" loading={loading} />
-            <StatCard icon={FiTrendingUp} label="Students"   value={students}   accent="#00A3FF" loading={loading} />
+            <StatCard icon={FiUserCheck}  label="Teachers"   value={teachers}   accent="#00A3FF" loading={loadingCounts} />
+            <StatCard icon={FiShield}     label="Moderators" value={moderators} accent="#A07060" loading={loadingCounts} />
+            <StatCard icon={FiUsers}      label="Parents"    value={parents}    accent="#1E3A5F" loading={loadingCounts} />
+            <StatCard icon={FiTrendingUp} label="Students"   value={students}   accent="#00A3FF" loading={loadingCounts} />
           </div>
 
-          {/* Charts row — stacked on mobile, side by side on lg+ */}
+          {/* Charts row */}
           <div className="flex flex-col lg:flex-row gap-4 mb-6">
 
-            {/* Weekly posts area chart */}
+            {/* Weekly posts area chart — real data */}
             <div className="flex flex-col bg-cream rounded-2xl p-4 sm:p-5 flex-[2]">
               <SectionHeader title="Weekly Posts" />
               <div className="bg-light-cream rounded-xl p-3 sm:p-4">
-                <ResponsiveContainer width="100%" height={180}>
-                  <AreaChart data={weeklyPostsData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="gradAccepted" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="#00A3FF" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#00A3FF" stopOpacity={0}   />
-                      </linearGradient>
-                      <linearGradient id="gradRejected" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="#A07060" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#A07060" stopOpacity={0}   />
-                      </linearGradient>
-                      <linearGradient id="gradPending" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="#CAA897" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#CAA897" stopOpacity={0}   />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F2EAE6" />
-                    <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#A07060", fontWeight: 600 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "#A07060" }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Area type="monotone" dataKey="accepted" name="Accepted" stroke="#00A3FF" strokeWidth={2} fill="url(#gradAccepted)" dot={false} animationDuration={1200} />
-                    <Area type="monotone" dataKey="rejected" name="Rejected" stroke="#A07060" strokeWidth={2} fill="url(#gradRejected)" dot={false} animationDuration={1400} />
-                    <Area type="monotone" dataKey="pending"  name="Pending"  stroke="#CAA897" strokeWidth={2} fill="url(#gradPending)"  dot={false} animationDuration={1600} />
-                  </AreaChart>
-                </ResponsiveContainer>
+                {loadingPosts ? (
+                  <div className="h-[180px] flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-full border-4 border-cream border-t-light-blue animate-spin" />
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={180}>
+                    <AreaChart data={weeklyPostsData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="gradApproved" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%"  stopColor="#00A3FF" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#00A3FF" stopOpacity={0}   />
+                        </linearGradient>
+                        <linearGradient id="gradRejected" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%"  stopColor="#A07060" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#A07060" stopOpacity={0}   />
+                        </linearGradient>
+                        <linearGradient id="gradPending" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%"  stopColor="#CAA897" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#CAA897" stopOpacity={0}   />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F2EAE6" />
+                      <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#A07060", fontWeight: 600 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: "#A07060" }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<ChartTooltip />} />
+                      <Area type="monotone" dataKey="approved" name="Approved" stroke="#00A3FF" strokeWidth={2} fill="url(#gradApproved)" dot={false} animationDuration={1200} />
+                      <Area type="monotone" dataKey="rejected" name="Rejected" stroke="#A07060" strokeWidth={2} fill="url(#gradRejected)" dot={false} animationDuration={1400} />
+                      <Area type="monotone" dataKey="pending"  name="Pending"  stroke="#CAA897" strokeWidth={2} fill="url(#gradPending)"  dot={false} animationDuration={1600} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
                 <div className="flex flex-row gap-4 mt-2 justify-center flex-wrap">
-                  {[["Accepted","#00A3FF"],["Rejected","#A07060"],["Pending","#CAA897"]].map(([name, color]) => (
+                  {[["Approved","#00A3FF"],["Rejected","#A07060"],["Pending","#CAA897"]].map(([name, color]) => (
                     <div key={name} className="flex items-center gap-1">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
                       <p className="text-xs font-semibold text-dark-cream">{name}</p>
@@ -241,7 +371,7 @@ export default function DashboardPage() {
             <div className="flex flex-col bg-cream rounded-2xl p-4 sm:p-5 flex-1">
               <SectionHeader title="User Distribution" />
               <div className="bg-light-cream rounded-xl p-3 sm:p-4 flex flex-col items-center">
-                {loading ? (
+                {loadingCounts ? (
                   <div className="w-full h-[140px] flex items-center justify-center">
                     <div className="w-20 h-20 rounded-full border-4 border-cream border-t-light-blue animate-spin" />
                   </div>
@@ -262,7 +392,7 @@ export default function DashboardPage() {
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[i] }} />
                         <p className="text-xs font-semibold text-dark-cream">{d.name}</p>
                       </div>
-                      <p className="text-xs font-bold text-dark-blue">{loading ? "—" : d.value}</p>
+                      <p className="text-xs font-bold text-dark-blue">{loadingCounts ? "—" : d.value}</p>
                     </div>
                   ))}
                 </div>
@@ -270,60 +400,91 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Middle row — stacked on mobile, 3 cols on lg+ */}
+          {/* Middle row */}
           <div className="flex flex-col lg:flex-row gap-4 mb-6">
 
-            {/* Posts today */}
+            {/* Posts today — real data */}
             <div className="flex flex-col bg-cream rounded-2xl p-4 sm:p-5 flex-1">
               <SectionHeader title="Posts Today" href="#" />
               <div className="flex flex-col bg-light-cream rounded-xl p-4 gap-3">
-                <div className="flex flex-row items-end gap-2">
-                  <p className="text-5xl sm:text-6xl font-normal text-dark-cream">18</p>
-                  <p className="text-base sm:text-lg pb-2 text-dark-blue font-semibold">Total</p>
-                </div>
-                <div className="flex flex-row gap-2">
-                  <div className="flex flex-col flex-1 items-center bg-cream rounded-xl p-3 gap-1">
-                    <FiClock size={16} className="text-yellow-500" />
-                    <p className="text-xl font-normal text-dark-blue">7</p>
-                    <p className="text-xs font-semibold text-dark-cream">Pending</p>
+                {loadingPosts ? (
+                  <div className="h-24 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full border-4 border-cream border-t-light-blue animate-spin" />
                   </div>
-                  <div className="flex flex-col flex-1 items-center bg-cream rounded-xl p-3 gap-1">
-                    <FiCheckCircle size={16} className="text-green-500" />
-                    <p className="text-xl font-normal text-dark-blue">9</p>
-                    <p className="text-xs font-semibold text-dark-cream">Accepted</p>
-                  </div>
-                  <div className="flex flex-col flex-1 items-center bg-cream rounded-xl p-3 gap-1">
-                    <FiXCircle size={16} className="text-red-400" />
-                    <p className="text-xl font-normal text-dark-blue">2</p>
-                    <p className="text-xs font-semibold text-dark-cream">Rejected</p>
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="flex flex-row items-end gap-2">
+                      <p className="text-5xl sm:text-6xl font-normal text-dark-cream">{todayPosts.length}</p>
+                      <p className="text-base sm:text-lg pb-2 text-dark-blue font-semibold">Total</p>
+                    </div>
+                    <div className="flex flex-row gap-2">
+                      <div className="flex flex-col flex-1 items-center bg-cream rounded-xl p-3 gap-1">
+                        <FiClock size={16} className="text-yellow-500" />
+                        <p className="text-xl font-normal text-dark-blue">{todayPending}</p>
+                        <p className="text-xs font-semibold text-dark-cream">Pending</p>
+                      </div>
+                      <div className="flex flex-col flex-1 items-center bg-cream rounded-xl p-3 gap-1">
+                        <FiCheckCircle size={16} className="text-green-500" />
+                        <p className="text-xl font-normal text-dark-blue">{todayApproved}</p>
+                        <p className="text-xs font-semibold text-dark-cream">Approved</p>
+                      </div>
+                      <div className="flex flex-col flex-1 items-center bg-cream rounded-xl p-3 gap-1">
+                        <FiXCircle size={16} className="text-red-400" />
+                        <p className="text-xl font-normal text-dark-blue">{todayRejected}</p>
+                        <p className="text-xs font-semibold text-dark-cream">Rejected</p>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Emergencies bar chart */}
+            {/* Emergencies this month — real data */}
             <div className="flex flex-col bg-cream rounded-2xl p-4 sm:p-5 flex-1">
-              <SectionHeader title="Emergencies (6 months)" href="#" />
+              <SectionHeader title="Emergencies (This Month)" href="#" />
               <div className="bg-light-cream rounded-xl p-3 sm:p-4">
-                <ResponsiveContainer width="100%" height={130}>
-                  <BarChart data={emergencyData} margin={{ top: 5, right: 5, left: -28, bottom: 0 }} barSize={9}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F2EAE6" />
-                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#A07060", fontWeight: 600 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 9, fill: "#A07060" }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Bar dataKey="active"   name="Active"   fill="#F97316" radius={[4,4,0,0]} animationDuration={1200} />
-                    <Bar dataKey="resolved" name="Resolved" fill="#00A3FF" radius={[4,4,0,0]} animationDuration={1400} />
-                  </BarChart>
-                </ResponsiveContainer>
-                <div className="flex flex-row gap-4 mt-2 justify-center">
-                  {[["Active","#F97316"],["Resolved","#00A3FF"]].map(([name, color]) => (
-                    <div key={name} className="flex items-center gap-1">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                      <p className="text-xs font-semibold text-dark-cream">{name}</p>
+                {loadingEmergencies ? (
+                  <div className="h-[130px] flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full border-4 border-cream border-t-light-blue animate-spin" />
+                  </div>
+                ) : (
+                  <>
+                    <ResponsiveContainer width="100%" height={130}>
+                      <BarChart data={emergencyData} margin={{ top: 5, right: 5, left: -28, bottom: 0 }} barSize={9}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F2EAE6" />
+                        <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#A07060", fontWeight: 600 }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 9, fill: "#A07060" }} axisLine={false} tickLine={false} />
+                        <Tooltip content={<ChartTooltip />} />
+                        <Bar dataKey="reported" name="Reported" fill="#F97316" radius={[4,4,0,0]} animationDuration={1200} />
+                        <Bar dataKey="resolved" name="Resolved" fill="#00A3FF" radius={[4,4,0,0]} animationDuration={1400} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <div className="flex flex-row gap-4 mt-2 justify-center">
+                      {[["Reported","#F97316"],["Resolved","#00A3FF"]].map(([name, color]) => (
+                        <div key={name} className="flex items-center gap-1">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                          <p className="text-xs font-semibold text-dark-cream">{name}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                )}
               </div>
+              {/* Summary counts */}
+              {!loadingEmergencies && (
+                <div className="flex flex-row gap-3 mt-3">
+                  <div className="flex flex-col flex-1 items-center bg-light-cream rounded-xl p-3 gap-1">
+                    <FiAlertCircle size={16} className="text-orange-500" />
+                    <p className="text-xl font-normal text-dark-blue">{reportedCount}</p>
+                    <p className="text-xs font-semibold text-dark-cream">Reported</p>
+                  </div>
+                  <div className="flex flex-col flex-1 items-center bg-light-cream rounded-xl p-3 gap-1">
+                    <FiCheckCircle size={16} className="text-blue-400" />
+                    <p className="text-xl font-normal text-dark-blue">{resolvedCount}</p>
+                    <p className="text-xs font-semibold text-dark-cream">Resolved</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Quick links */}
@@ -358,15 +519,30 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Recent activity */}
+          {/* Recent posts activity */}
           <div className="flex flex-col bg-cream rounded-2xl p-4 sm:p-5">
-            <SectionHeader title="Recent Activity" href="#" />
+            <SectionHeader title="Recent Posts" href="#" />
             <div className="flex flex-col bg-light-cream rounded-xl px-4">
-              <ActivityRow name="Sara Tesfaye"   role="Parent"    action="Submitted a post"  time="2m ago"  status="pending"  />
-              <ActivityRow name="Abebe Kebede"   role="Teacher"   action="Post approved"      time="14m ago" status="accepted" />
-              <ActivityRow name="Mulugeta Haile" role="Moderator" action="Resolved emergency" time="1h ago"  status="resolved" />
-              <ActivityRow name="Tigist Belay"   role="Teacher"   action="Post rejected"      time="2h ago"  status="rejected" />
-              <ActivityRow name="Dawit Yohannes" role="Parent"    action="Reported emergency" time="3h ago"  status="active"   />
+              {loadingPosts ? (
+                <div className="py-8 text-center text-dark-cream text-sm">Loading...</div>
+              ) : posts.length === 0 ? (
+                <div className="py-8 text-center text-dark-cream text-sm italic">No posts yet</div>
+              ) : (
+                posts
+                  .slice()
+                  .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                  .slice(0, 5)
+                  .map((post) => (
+                    <ActivityRow
+                      key={post.post_id}
+                      name={`Teacher #${post.teacher_id}`}
+                      role="Teacher"
+                      action={post.caption_text?.slice(0, 40) || "Posted an activity"}
+                      time={new Date(post.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                      status={post.status}
+                    />
+                  ))
+              )}
             </div>
           </div>
 
